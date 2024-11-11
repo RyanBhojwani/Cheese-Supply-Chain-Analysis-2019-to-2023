@@ -136,7 +136,7 @@ generate_forecast <- function(data, retailer_id) {
 }
 
 # Main function to run the entire analysis
-main <- function(retailer_id, iterations = 10) {
+main <- function(retailer_id, iterations = 1000) {
   # Set seed for reproducibility
   set.seed(1)
   
