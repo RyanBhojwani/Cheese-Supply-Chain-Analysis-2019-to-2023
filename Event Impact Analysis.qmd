@@ -1,0 +1,152 @@
+---
+title: "Major Pandemic Event Analysis"
+format: html
+editor: visual
+---
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(lubridate)
+
+# Read the CSV file
+data <- read.csv("ship_cheese2.csv")
+
+# Convert WEEK_BEGIN_DATE to Date format
+data$WEEK_BEGIN_DATE <- as.Date(data$WEEK_BEGIN_DATE, format = "%Y-%m-%d")
+
+# Clean the data:
+# - Drop rows where Zipcode is NA
+# - Exclude records where retailer_id is 1.0
+cleaned_data <- data %>%
+  filter(!is.na(Zipcode) & retailer_id != 1.0)
+```
+
+```{r}
+# Load necessary libraries
+library(dplyr)
+library(lubridate)
+
+# Create event milestones
+milestones <- data.frame(
+  event = c("A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L"),
+  date = as.Date(c("2020-01-20", "2020-03-13", "2020-03-21", "2020-04-01", 
+                   "2020-05-08", "2020-07-14", "2020-10-06", "2020-11-20", 
+                   "2021-05-01", "2021-10-23", "2021-12-01", "2022-01-19"))
+)
+
+# Function to create dummy variables for each event based on date proximity
+create_dummy <- function(date_column, milestone_date) {
+  as.integer(date_column >= milestone_date & date_column < (milestone_date + days(45)))
+}
+
+# Populate dummy variables for each milestone event
+for (i in 1:nrow(milestones)) {
+  milestone <- milestones[i,]
+  dummy_column_name <- paste0("milestone_", milestone$event)  # Combine strings to create unique column name
+  
+  # Apply the dummy creation function for each milestone
+  cleaned_data[[dummy_column_name]] <- create_dummy(cleaned_data$WEEK_BEGIN_DATE, milestone$date)
+}
+```
+
+```{r}
+# Load necessary libraries
+library(ggplot2)
+
+# Combine the data by week
+weekly_data <- cleaned_data %>%
+  group_by(WEEK_BEGIN_DATE) %>%
+  summarise(
+    total_qty_ship = sum(QTY.SHIP, na.rm = TRUE),  # Total quantity shipped each week
+    total_qty_ordered = sum(QTY.SHIP + QTY_NOT_SHP, na.rm = TRUE),  # Total quantity ordered (shipped + not shipped)
+    percent_shipped = (sum(QTY.SHIP, na.rm = TRUE) / sum(QTY.SHIP + QTY_NOT_SHP, na.rm = TRUE)) * 100,  # Percentage of quantity shipped
+    across(starts_with("milestone_"), sum, na.rm = TRUE)  # Sum dummy variables for milestones
+  )
+
+# Plot weekly quantity shipped with milestone markers
+ggplot(weekly_data, aes(x = WEEK_BEGIN_DATE, y = total_qty_ship)) +
+  geom_line(color = "blue") +  # Blue line for total quantity shipped
+  geom_smooth(method = "loess", span = 0.2, color = "red", size = 1) +  # Red LOESS smoothed line
+  labs(
+    title = "Total Quantity Shipped Each Week",
+    x = "Date",
+    y = "Total Quantity Shipped"
+  ) +
+  theme_minimal() +  # Minimal theme
+  geom_vline(data = milestones, aes(xintercept = as.numeric(date)), linetype = "dashed", color = "black") +  # Dashed vertical lines for milestones
+  geom_text(
+    data = milestones,
+    aes(x = date, y = max(weekly_data$total_qty_ship), label = event),
+    angle = 90, vjust = -0.5, hjust = -0.1, size = 3
+  ) +  # Labels for the events with vertical text
+  xlim(as.Date("2020-01-01"), as.Date("2022-04-01"))  # Set x-axis range
+
+```
+
+```{r}
+# Plot the percentage shipped each week with milestone overlays
+ggplot(weekly_data, aes(x = WEEK_BEGIN_DATE, y = percent_shipped)) +
+  geom_line(color = "blue") +  # Blue line for percentage shipped
+  geom_smooth(method = "loess", span = 0.2, color = "red", size = 1) +  # Red LOESS smoothed line
+  labs(
+    title = "Percentage Shipped Each Week",
+    x = "Date",
+    y = "Percentage Shipped (%)"
+  ) +
+  theme_minimal() +  # Minimal theme for clean visuals
+  geom_vline(data = milestones, aes(xintercept = as.numeric(date)), linetype = "dashed", color = "black") +  # Vertical dashed lines for milestones
+  geom_text(
+    data = milestones,
+    aes(x = date, y = max(weekly_data$percent_shipped), label = event),
+    angle = 90, vjust = -0.5, hjust = -0.1, size = 3
+  ) +  # Labels for milestone events with vertical text
+  xlim(as.Date("2020-01-01"), as.Date("2022-04-01"))  # Set x-axis range for specific time period
+
+```
+
+```{r}
+# Fit the model to quantity shipped
+model1 <- lm(total_qty_ship ~ milestone_A + milestone_B + milestone_C + milestone_D + milestone_E + milestone_F + milestone_G + milestone_H + milestone_I + milestone_J + milestone_K + milestone_L, data = weekly_data)
+
+# Display the summary of the regression
+summary(model1)
+
+
+# Remove insignificant milestones
+model1 <- lm(total_qty_ship ~ milestone_A + milestone_F + milestone_G + milestone_H, data = weekly_data)
+
+# Display the summary of the regression
+summary(model1)
+
+# Remove insignificant milestones
+model1 <- lm(total_qty_ship ~ milestone_G + milestone_H, data = weekly_data)
+
+# Display the summary of the regression
+summary(model1)
+
+
+```
+
+\
+
+```{r}
+# Fit the model on percent_shipped
+model2 <- lm(percent_shipped ~ milestone_A + milestone_B + milestone_C + milestone_D + milestone_E + milestone_F + milestone_G + milestone_H + milestone_I + milestone_J + milestone_K + milestone_L, data = weekly_data)
+
+# Display the summary of the regression
+summary(model2)
+
+# Remove insignificant milestones
+model2 <- lm(percent_shipped ~ milestone_A + milestone_C + milestone_E + milestone_F + milestone_I + milestone_K + milestone_L, data = weekly_data)
+
+# Display the summary of the regression
+summary(model2)
+
+# Remove insignificant milestones
+model2 <- lm(percent_shipped ~ milestone_C + milestone_E + milestone_F +  milestone_K + milestone_L, data = weekly_data)
+
+# Display the summary of the regression
+summary(model2)
+
+```
